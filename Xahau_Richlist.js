@@ -149,7 +149,7 @@ async function main() {
             processedLedgers.add(ledgerIndex);
         }
 
-        const batchSize = 25;
+        const batchSize = 5;
         const ledgerStep = 1000;
         const minimumLedger = 1;
         
