@@ -73,9 +73,16 @@ async function main() {
             if (accountDifference < STABILITY_THRESHOLD) {
                 stableCountIterations++;
                 if (stableCountIterations * 15000 >= STABILITY_TIME) {
+                    // Existing copy
                     fs.copyFileSync(
                         path.join(outputFolder, "live_summary.json"),
                         path.join(outputFolder, "complete_summary.json")
+                    );
+                    
+                    // Additional copy to the website path
+                    fs.copyFileSync(
+                        path.join(outputFolder, "live_summary.json"),
+                        path.join("E:", "Website", "Xahau", "XahauLedgerFetched", "complete_summary.json")
                     );
                     
                     fs.readdirSync(outputFolder).forEach(file => {
@@ -89,8 +96,6 @@ async function main() {
                     console.log("All ledger files cleaned up.");
                     process.exit(0);
                 }
-            } else {
-                stableCountIterations = 0;
             }
     
             lastAccountCount = state.size;
