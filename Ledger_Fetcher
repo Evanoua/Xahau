@@ -1,0 +1,114 @@
+const xrpl = require("xrpl");
+const fs = require("fs");
+const path = require("path");
+
+const client = new xrpl.Client("wss://xahau.network");
+
+async function main() {
+    try {
+        await client.connect();
+
+        // Fetch the latest validated ledger index
+        const { result: { ledger_index: latestLedgerIndex } } = await client.request({
+            command: "ledger",
+            ledger_index: "validated",
+            api_version: 1
+        });
+
+        console.log(`Using Latest Validated Ledger Index: ${latestLedgerIndex}`);
+
+        const ranges = [
+            { range: "0 - 10", min: 0, max: 10, count: 0, sum: 0 },
+            { range: "10 - 100", min: 10, max: 100, count: 0, sum: 0 },
+            { range: "100 - 1000", min: 100, max: 1000, count: 0, sum: 0 },
+            { range: "1000+", min: 1000, max: Infinity, count: 0, sum: 0 }
+        ];
+
+        const state = [];
+        const batchSize = 1000; // Adjust batch size based on the network
+        const maxConcurrentRequests = 10; // Max number of parallel requests
+
+        // Create a folder for JSON files
+        const outputFolder = path.join(__dirname, "XahauLedgerFetched");
+        if (!fs.existsSync(outputFolder)) {
+            fs.mkdirSync(outputFolder);
+        }
+
+        // Function to fetch ledger data
+        async function fetchLedgerData(ledgerIndex) {
+            try {
+                const response = await client.request({
+                    command: "ledger_data",
+                    ledger_index: ledgerIndex,
+                    api_version: 1
+                });
+
+                if (response.result.state) {
+                    state.push(...response.result.state); // Append the accounts
+
+                    // Write ledger batch to JSON
+                    const filePath = path.join(outputFolder, `ledger_${ledgerIndex}.json`);
+                    fs.writeFileSync(filePath, JSON.stringify(response.result.state, null, 2));
+                    console.log(`Ledger ${ledgerIndex} data exported to ${filePath}`);
+                } else {
+                    console.warn(`No state found in ledger ${ledgerIndex}`);
+                }
+            } catch (error) {
+                console.error(`Error fetching ledger ${ledgerIndex}:`, error.message);
+            }
+        }
+
+        // Generate an array of ledger indices to fetch
+        const ledgerIndices = [];
+        for (let ledgerIndex = latestLedgerIndex; ledgerIndex > 0; ledgerIndex -= batchSize) {
+            ledgerIndices.push(ledgerIndex);
+        }
+
+        // Fetch data in parallel with a concurrency limit
+        const parallelFetch = async () => {
+            const batches = [];
+            while (ledgerIndices.length > 0) {
+                const currentBatch = ledgerIndices.splice(0, maxConcurrentRequests);
+                const fetchPromises = currentBatch.map(fetchLedgerData);
+                batches.push(...(await Promise.all(fetchPromises)));
+            }
+            return batches;
+        };
+
+        await parallelFetch();
+
+        console.log(`Total Accounts Retrieved: ${state.length}`);
+
+        // Process account data and populate ranges
+        state.forEach((entry) => {
+            if (entry.Balance && !isNaN(entry.Balance)) {
+                const balance = parseFloat(xrpl.dropsToXrp(entry.Balance));
+
+                ranges.forEach((r) => {
+                    if (balance >= r.min && balance < r.max) {
+                        r.count++;
+                        r.sum += balance;
+                    }
+                });
+            }
+        });
+
+        // Write summary table to JSON
+        const summaryFilePath = path.join(outputFolder, "summary.json");
+        fs.writeFileSync(summaryFilePath, JSON.stringify(ranges, null, 2));
+        console.log(`Summary data exported to ${summaryFilePath}`);
+
+        // Print results in a table
+        console.log("\nNumber of Accounts | Balance Range      | Total Balance");
+        console.log("----------------------------------------------------");
+        ranges.forEach((r) => {
+            console.log(`${r.count.toString().padEnd(18)} | ${r.range.padEnd(16)} | ${r.sum.toFixed(2)} XAH`);
+        });
+    } catch (error) {
+        console.error("Error:", error);
+    } finally {
+        await client.disconnect();
+    }
+}
+
+main();
