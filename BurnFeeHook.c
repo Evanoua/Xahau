@@ -44,3 +44,8 @@ int64_t hook(uint32_t reserved) {
 
     return result;
 }
+
+//compile hook
+//*hooks-cli compile burn_fee_hook.c
+//deploy hook token account
+//*hooks-cli deploy --account rYourIssuerAddress --hook ./burn_fee_hook.wasm
