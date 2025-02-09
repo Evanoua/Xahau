@@ -15,3 +15,5 @@ async function connectWallet() {
 }
 
 document.getElementById("connect").addEventListener("click", connectWallet);
+
+//mettre dans script.js dossier projet
